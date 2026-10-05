@@ -18,6 +18,7 @@ use registry::{Registry,Stage};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path,PathBuf};
+use std::process::Command as ProcessCommand;
 use std::sync::atomic::{AtomicUsize,Ordering};
 
 const PIPELINE_VERSION:u32=3;
@@ -30,16 +31,17 @@ enum Command{
     Run{#[arg(long)]sources:Option<PathBuf>,#[arg(long)]profile:Option<PathBuf>,#[arg(long)]root:Option<PathBuf>,#[arg(long)]output:Option<PathBuf>,#[arg(long)]force:bool},
     Discover{#[arg(long)]sources:Option<PathBuf>},
     Validate{#[arg(long)]output:Option<PathBuf>},
+    Doctor,
 }
 #[derive(Clone,Debug)]
 struct Config{sources:PathBuf,profile:PathBuf,root:PathBuf,output:PathBuf,classify_concurrency:usize,research_concurrency:usize,force:bool,ocr:bool,keep_video:bool}
 impl Config{
     fn from_args(sources:Option<PathBuf>,profile:Option<PathBuf>,root:Option<PathBuf>,output:Option<PathBuf>,force:bool)->Self{
         Self{
-            sources:sources.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_SOURCES").unwrap_or_else(|_|"sources.txt".into()))),
-            profile:profile.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_PROFILE").unwrap_or_else(|_|"profiles/default.json".into()))),
-            root:root.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_ROOT").unwrap_or_else(|_|".frameforge".into()))),
-            output:output.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_OUTPUT").unwrap_or_else(|_|"frameforge-output".into()))),
+            sources:sources.unwrap_or_else(||default_path("FRAMEFORGE_SOURCES","sources.txt")),
+            profile:profile.unwrap_or_else(||default_path("FRAMEFORGE_PROFILE","profiles/default.json")),
+            root:root.unwrap_or_else(||default_path("FRAMEFORGE_ROOT",".frameforge")),
+            output:output.unwrap_or_else(||default_path("FRAMEFORGE_OUTPUT","frameforge-output")),
             classify_concurrency:env_usize("FRAMEFORGE_CLASSIFY_CONCURRENCY",6).clamp(1,16),
             research_concurrency:env_usize("FRAMEFORGE_RESEARCH_CONCURRENCY",2).clamp(1,4),
             force:force||std::env::var("FRAMEFORGE_FORCE_REFRESH").as_deref()==Ok("1"),
@@ -49,23 +51,68 @@ impl Config{
     }
 }
 fn env_usize(name:&str,default:usize)->usize{std::env::var(name).ok().and_then(|v|v.parse().ok()).unwrap_or(default)}
+
+fn runtime_dir()->PathBuf{
+    let cwd=std::env::current_dir().unwrap_or_else(|_|PathBuf::from("."));
+    let Some(exe_dir)=std::env::current_exe().ok().and_then(|p|p.parent().map(Path::to_path_buf)) else{return cwd;};
+    if exe_dir.join("profiles/default.json").is_file()&&exe_dir.join("sources.txt").is_file(){exe_dir}else{cwd}
+}
+fn default_path(env_name:&str,relative:&str)->PathBuf{
+    if let Ok(value)=std::env::var(env_name){PathBuf::from(value)}else{runtime_dir().join(relative)}
+}
+fn command_available(command:&str,args:&[&str])->bool{
+    ProcessCommand::new(command).args(args).output().map(|output|output.status.success()).unwrap_or(false)
+}
+fn doctor()->Result<()>{
+    let sources=default_path("FRAMEFORGE_SOURCES","sources.txt");
+    let profile=default_path("FRAMEFORGE_PROFILE","profiles/default.json");
+    println!("FrameForge environment check");
+    println!();
+    let mut ok=true;
+    for (name,args,required) in [
+        ("yt-dlp",&["--version"][..],true),
+        ("ffmpeg",&["-version"][..],true),
+        ("ffprobe",&["-version"][..],true),
+        ("deno",&["--version"][..],false),
+    ]{
+        let available=command_available(name,args);
+        println!("{:<8} {}",name,if available{"OK"}else if required{"MISSING"}else{"NOT FOUND"});
+        if required&&!available{ok=false;}
+    }
+    if std::env::var("FRAMEFORGE_OCR").as_deref()==Ok("1"){
+        let available=command_available("tesseract",&["--version"]);
+        println!("{:<8} {}", "tesseract", if available{"OK"}else{"MISSING"});
+        if !available{ok=false;}
+    }
+    println!();
+    println!("Sources: {}",sources.display());
+    println!("Profile: {}",profile.display());
+    if !sources.is_file(){println!("ERROR: sources file not found.");ok=false;}
+    if !profile.is_file(){println!("ERROR: profile file not found.");ok=false;}
+    if ok{println!();println!("Environment check passed.");Ok(())}else{bail!("Environment check failed. Fix the items marked MISSING and run frameforge doctor again.")}
+}
+
 fn main()->Result<()>{
     match Cli::parse().command{
         Command::Run{sources,profile,root,output,force}=>run(Config::from_args(sources,profile,root,output,force)),
         Command::Discover{sources}=>{
-            let path=sources.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_SOURCES").unwrap_or_else(|_|"sources.txt".into())));
+            let path=sources.unwrap_or_else(||default_path("FRAMEFORGE_SOURCES","sources.txt"));
             for source in read_sources(&path)?{println!("{}: {} candidates",source,ytdlp::discover_source(&source)?.len());}
             Ok(())
         },
         Command::Validate{output}=>{
-            let output=output.unwrap_or_else(||PathBuf::from(std::env::var("FRAMEFORGE_OUTPUT").unwrap_or_else(|_|"frameforge-output".into())));
+            let output=output.unwrap_or_else(||default_path("FRAMEFORGE_OUTPUT","frameforge-output"));
             let report=validation::validate_output(&output)?;
             println!("VALIDATION PASSED: {} videos checked",report.videos_checked);
             Ok(())
         },
+        Command::Doctor=>doctor(),
     }
 }
 fn run(config:Config)->Result<()>{
+    if !command_available("yt-dlp",&["--version"]){bail!("yt-dlp is required but was not found on PATH. Install yt-dlp and run frameforge doctor.");}
+    if !command_available("ffmpeg",&["-version"]){bail!("FFmpeg is required but was not found on PATH. Install FFmpeg and run frameforge doctor.");}
+    if !command_available("ffprobe",&["-version"]){bail!("FFprobe is required but was not found on PATH. Install FFmpeg/FFprobe and run frameforge doctor.");}
     fs::create_dir_all(&config.root)?;fs::create_dir_all(&config.output)?;
     if config.ocr&&!visual::tesseract_available(){bail!("OCR is enabled but Tesseract is unavailable. Install Tesseract or set FRAMEFORGE_OCR=0.");}
     let sources=read_sources(&config.sources)?;if sources.is_empty(){bail!("No research sources found.");}
