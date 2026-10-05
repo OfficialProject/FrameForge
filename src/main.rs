@@ -134,7 +134,7 @@ fn research_one(record:&ClassificationRecord,config:&Config,registry:&Registry)-
             let visual=visual::extract_exhaustive_1fps(&source,&frames_dir)?;write_json(&visual_path,&visual)?;registry.mark_stage(id,Stage::Visual)?;visual
         };
         let ocr_path=dir.join("ocr.json");
-        let ocr=if !config.force&&config.ocr&&registry.stage_at_least(id,Stage::Ocr)&&valid_ocr_cache(&dir,&ocr_path)?{read_json(&ocr_path)?}else if config.ocr{
+        let ocr=if !config.force&&config.ocr&&registry.stage_at_least(id,Stage::Ocr)&&valid_ocr_cache(&dir,&ocr_path,&visual)?{read_json(&ocr_path)?}else if config.ocr{
             let ocr=visual::ocr_frames(&frames_dir,&visual)?;write_json(&ocr_path,&ocr)?;registry.mark_stage(id,Stage::Ocr)?;ocr
         }else{write_json(&ocr_path,&Vec::<model::OcrRecord>::new())?;registry.mark_stage(id,Stage::Ocr)?;Vec::new()};
         let mut warnings=visual.warnings.clone();
@@ -172,23 +172,33 @@ fn research_cache_current(dir:&Path,record:&ClassificationRecord,config:&Config)
         && value.pointer("/video/title").and_then(serde_json::Value::as_str)==Some(record.video.title.as_str())
         && value.pointer("/video/is_short").and_then(serde_json::Value::as_bool)==Some(record.video.is_short)
 }
-fn valid_ocr_cache(dir:&Path,ocr_path:&Path)->Result<bool>{
+fn valid_ocr_cache(dir:&Path,ocr_path:&Path,visual:&model::VisualResult)->Result<bool>{
     if !ocr_path.is_file(){return Ok(false);}
     let Ok(entries)=read_json::<Vec<model::OcrRecord>>(ocr_path) else{return Ok(false);};
     let Ok(analysis)=read_json::<serde_json::Value>(&dir.join("analysis.json")) else{return Ok(false);};
     if analysis.pointer("/pipeline/ocrEnabled").and_then(serde_json::Value::as_bool)!=Some(true){return Ok(false);}
+    let frame_times=visual.frames.iter().map(|f|f.time.to_bits()).collect::<std::collections::HashSet<_>>();
     let mut previous=-1.0;
     for entry in entries{
-        if !entry.time.is_finite()||entry.time<0.0||entry.text.trim().is_empty()||entry.time<previous{return Ok(false);}
+        if !entry.time.is_finite()||entry.time<0.0||entry.text.trim().is_empty()||entry.time<previous||!frame_times.contains(&entry.time.to_bits()){return Ok(false);}
         previous=entry.time;
     }
     Ok(true)
 }
 fn valid_visual_cache(visual_path:&Path,frames_dir:&Path)->Result<bool>{
-    if !visual_path.is_file(){return Ok(false);}let visual:model::VisualResult=read_json(visual_path)?;
+    if !visual_path.is_file(){return Ok(false);}
+    let visual:model::VisualResult=read_json(visual_path)?;
     if visual.expected_samples>0&&visual.sampled_samples<visual.expected_samples{return Ok(false);}
     if visual.sampled_samples!=visual.frames.len(){return Ok(false);}
-    Ok(visual.frames.iter().all(|frame|frames_dir.parent().unwrap_or(frames_dir).join(&frame.path).is_file()))
+    let mut paths=std::collections::HashSet::new();
+    for (index,frame) in visual.frames.iter().enumerate(){
+        let relative=Path::new(&frame.path);
+        if frame.index!=index||!frame.time.is_finite()||frame.time<0.0||relative.is_absolute()||relative.components().any(|c|matches!(c,std::path::Component::ParentDir|std::path::Component::RootDir|std::path::Component::Prefix(_)))||!frame.path.starts_with("frames/"){return Ok(false);}
+        if !paths.insert(frame.path.clone()){return Ok(false);}
+        let resolved=frames_dir.parent().unwrap_or(frames_dir).join(relative);
+        if !resolved.is_file()||!resolved.starts_with(frames_dir){return Ok(false);}
+    }
+    Ok(true)
 }
 fn tool_versions()->serde_json::Value{serde_json::json!({"yt-dlp":command_version("yt-dlp",&["--version"]),"ffmpeg":command_version("ffmpeg",&["-version"]),"ffprobe":command_version("ffprobe",&["-version"]),"tesseract":command_version("tesseract",&["--version"])})}
 fn command_version(command:&str,args:&[&str])->Option<String>{std::process::Command::new(command).args(args).output().ok().filter(|o|o.status.success()).and_then(|o|String::from_utf8(o.stdout).ok()).and_then(|s|s.lines().next().map(str::to_owned))}

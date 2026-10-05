@@ -93,6 +93,11 @@ world this is CS2
         assert_eq!(result[1].text, "this is CS2");
     }
     #[test]
+    fn rejects_non_finite_and_reversed_timestamps() {
+        assert!(parse_vtt("WEBVTT\n\nNaN --> 2.0\nignored\n").is_empty());
+        assert!(parse_vtt("WEBVTT\n\n3.0 --> 2.0\nignored\n").is_empty());
+    }
+    #[test]
     fn unicode_overlap_is_safe() {
         let input = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello 🌎\n\n00:00:01.000 --> 00:00:03.000\n🌎 world\n";
         let result = parse_vtt(input);

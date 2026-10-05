@@ -134,4 +134,5 @@ mod tests{
     #[test]fn montage(){assert!(matches!(classifier().quick_title("Best highlights montage",false),Decision::NonEducational));}
     #[test]fn uncertain(){let(label,_,_)=classifier().score_text("Thoughts and observations",false);assert_eq!(label,"uncertain");}
     #[test]fn avoids_substring_false_positive(){assert!(!matches_term("claiming a result","aim"));assert!(matches_term("aim fundamentals","aim"));}
+    #[test]fn rejects_empty_profile_keyword(){let mut c=classifier();c.profile.classification.positive[0].0.clear();assert!(validate_profile(&c.profile).is_err());}
 }
