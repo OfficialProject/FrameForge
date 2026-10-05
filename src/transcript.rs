@@ -86,11 +86,11 @@ mod tests {
 Hello world
 
 00:00:01.000 --> 00:00:03.000
-world this is CS2
+world this is FrameForge
 ";
         let result = parse_vtt(input);
         assert_eq!(result[0].text, "Hello world");
-        assert_eq!(result[1].text, "this is CS2");
+        assert_eq!(result[1].text, "this is FrameForge");
     }
     #[test]
     fn rejects_non_finite_and_reversed_timestamps() {
