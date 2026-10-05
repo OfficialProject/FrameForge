@@ -1,4 +1,4 @@
-use crate::model::{Classification, OcrRecord, TranscriptEntry, VideoCandidate, VideoMetadata};
+use crate::atomic; use crate::model::{Classification, OcrRecord, TranscriptEntry, VideoCandidate, VideoMetadata};
 use anyhow::{bail,Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -224,7 +224,7 @@ pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], prof
 
     let path = output.join("research_catalog.json");
     let temp=output.join(format!(".research_catalog.json.tmp.{}",std::process::id()));
-    fs::write(&temp,serde_json::to_vec_pretty(&catalog)?)?;fs::rename(temp,&path)?;Ok(path)
+    atomic::write(&path,&serde_json::to_vec_pretty(&catalog)?)?;Ok(path)
 }
 
 fn prerequisite_learning_order(concepts: &[Value]) -> Result<Vec<String>> {

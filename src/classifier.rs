@@ -1,4 +1,4 @@
-use crate::model::{Classification,ClassificationRecord,VideoCandidate};
+use crate::atomic; use crate::model::{Classification,ClassificationRecord,VideoCandidate};
 use crate::ytdlp;
 use anyhow::{Context,Result};
 use serde::Deserialize;
@@ -69,8 +69,7 @@ impl Classifier{
         };
         let path=self.root.join(format!("{}.json",video.id));
         let temp=path.with_extension("json.tmp");
-        fs::write(&temp,serde_json::to_vec_pretty(&record)?)?;
-        fs::rename(temp,path)?;
+        atomic::write(&path,&serde_json::to_vec_pretty(&record)?)?;
         Ok(record)
     }
 

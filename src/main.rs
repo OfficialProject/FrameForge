@@ -1,4 +1,5 @@
 mod catalog;
+mod atomic;
 mod classifier;
 mod model;
 mod progress;
@@ -205,7 +206,7 @@ fn tool_versions()->serde_json::Value{serde_json::json!({"yt-dlp":command_versio
 fn command_version(command:&str,args:&[&str])->Option<String>{std::process::Command::new(command).args(args).output().ok().filter(|o|o.status.success()).and_then(|o|String::from_utf8(o.stdout).ok()).and_then(|s|s.lines().next().map(str::to_owned))}
 fn write_json<T:serde::Serialize>(path:&Path,value:&T)->Result<()>{
     let temp=path.with_file_name(format!(".{}.tmp.{}",path.file_name().and_then(|n|n.to_str()).unwrap_or("frameforge.json"),std::process::id()));
-    fs::write(&temp,serde_json::to_vec_pretty(value)?)?;fs::rename(temp,path)?;Ok(())
+    atomic::write(path,&serde_json::to_vec_pretty(value)?)?;Ok(())
 }
 fn read_json<T:for<'de>serde::Deserialize<'de>>(path:&Path)->Result<T>{Ok(serde_json::from_slice(&fs::read(path)?)?)}
 fn read_sources(path:&Path)->Result<Vec<String>>{let text=fs::read_to_string(path).with_context(||format!("cannot read {}",path.display()))?;Ok(text.lines().map(str::trim).filter(|l|!l.is_empty()&&!l.starts_with('#')).map(ToOwned::to_owned).collect())}
