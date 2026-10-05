@@ -1,0 +1,12 @@
+{
+  "name": "default",
+  "description": "General-purpose educational and informational video research profile.",
+  "classification": {
+    "educational_threshold": 6,
+    "short_educational_threshold": 8,
+    "non_educational_threshold": -3,
+    "short_penalty": -1,
+    "positive": [["how to",5,"how-to instruction"],["guide",5,"guide"],["tutorial",5,"tutorial"],["tips",4,"tips"],["teaching",5,"teaching"],["learning",4,"learning"],["improve",5,"improvement"],["training",5,"training"],["practice",4,"practice"],["coaching",5,"coaching"],["analysis",5,"analysis"],["breakdown",5,"breakdown"],["explained",5,"explained"],["fundamentals",5,"fundamentals"],["mechanics",4,"mechanics"],["strategy",4,"strategy"],["tactics",4,"tactics"],["positioning",4,"positioning"],["decision making",4,"decision making"],["mistakes",4,"mistakes"],["communication",4,"communication"],["settings",3,"settings"],["workflow",4,"workflow"],["technique",4,"technique"],["skills",4,"skills"],["lessons",4,"lessons"],["review",4,"review"],["case study",4,"case study"],["walkthrough",5,"walkthrough"],["deep dive",5,"deep dive"]],
+    "negative": [["funniest",-6,"comedy"],["funny moments",-6,"comedy"],["highlights",-7,"highlights"],["montage",-7,"montage"],["best moments",-7,"best moments"],["clip dump",-6,"clips"],["reaction",-5,"reaction"],["challenge",-5,"challenge"],["rage",-5,"rage"],["vlog",-7,"lifestyle"],["irl",-7,"lifestyle"],["day in the life",-7,"lifestyle"],["giveaway",-7,"giveaway"],["livestream",-5,"stream"],["stream",-5,"stream"],["watch party",-4,"watch-along"]]
+  }
+}

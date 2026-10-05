@@ -1,0 +1,3 @@
+# FrameForge research inputs.
+# Put one YouTube channel URL or individual video URL per line.
+# The default profile accepts both channels and individual videos.
