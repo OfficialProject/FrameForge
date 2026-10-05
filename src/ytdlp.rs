@@ -12,7 +12,7 @@ fn validate_video_id(id:&str)->Result<()>{
     if id.len()!=11||!id.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'_'||c==b'-'){bail!("yt-dlp returned an invalid YouTube video id");}
     Ok(())
 }
-fn normalize_url(url:&str,id:&str)->String{if url.contains("youtube.com/watch"){format!("https://www.youtube.com/watch?v={id}")}else if url.len()==11{format!("https://www.youtube.com/watch?v={id}")}else{url.to_string()}}
+fn normalize_url(url:&str,id:&str)->String{if url.contains("youtube.com/watch")||url.len()==11{format!("https://www.youtube.com/watch?v={id}")}else{url.to_string()}}
 
 pub fn discover_source(source:&str)->Result<Vec<VideoCandidate>>{
     let source=source.trim();

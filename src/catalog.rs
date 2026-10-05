@@ -128,8 +128,10 @@ pub fn extract(
     }).collect()
 }
 
+ type Aggregate = (String, String, u8, Vec<String>, usize, f64, usize);
+
 pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], profile: &str) -> Result<PathBuf> {
-    let mut aggregate: HashMap<String, (String, String, u8, Vec<String>, usize, f64, usize)> = HashMap::new();
+    let mut aggregate: HashMap<String, Aggregate> = HashMap::new();
 
     for record in records {
         let path = output.join(&record.video.id).join("analysis.json");
@@ -145,7 +147,7 @@ pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], prof
             let score=concept.evidence_score;
             if !score.is_finite()||score<0.0{bail!("invalid evidence score for concept {id}");}
             let prerequisites=concept.prerequisites;
-            let entry = aggregate.entry(id.into()).or_insert((name, category, level, prerequisites, 0, 0.0, 0));
+            let entry = aggregate.entry(id).or_insert((name, category, level, prerequisites, 0, 0.0, 0));
             entry.4 += mentions;
             entry.5 += score;
             entry.6 += 1;

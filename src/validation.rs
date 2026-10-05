@@ -26,8 +26,8 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
     let catalog_concepts=catalog.get("concepts").and_then(Value::as_array).context("research catalog has no concepts")?;
     let mut concept_ids=HashSet::new();
     for concept in catalog_concepts{
-        if concept.get("evidenceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true)==false{bail!("catalog concept has invalid evidenceScore");}
-        if concept.get("importanceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true)==false{bail!("catalog concept has invalid importanceScore");}
+        if concept.get("evidenceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true){bail!("catalog concept has invalid evidenceScore");}
+        if concept.get("importanceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true){bail!("catalog concept has invalid importanceScore");}
         let id=concept.get("id").and_then(Value::as_str).context("catalog concept is missing id")?;
         if !concept_ids.insert(id.to_string()){bail!("catalog contains duplicate concept {id}");}
         for p in concept.get("prerequisites").and_then(Value::as_array).context("catalog concept is missing prerequisites")?{
