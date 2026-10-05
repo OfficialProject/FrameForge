@@ -42,7 +42,7 @@ impl Config{
             classify_concurrency:env_usize("FRAMEFORGE_CLASSIFY_CONCURRENCY",6).clamp(1,16),
             research_concurrency:env_usize("FRAMEFORGE_RESEARCH_CONCURRENCY",2).clamp(1,4),
             force:force||std::env::var("FRAMEFORGE_FORCE_REFRESH").as_deref()==Ok("1"),
-            ocr:std::env::var("FRAMEFORGE_OCR").as_deref()!=Ok("0"),
+            ocr:std::env::var("FRAMEFORGE_OCR").as_deref()==Ok("1"),
             keep_video:std::env::var("FRAMEFORGE_KEEP_VIDEO").as_deref()==Ok("1"),
         }
     }
@@ -66,6 +66,7 @@ fn main()->Result<()>{
 }
 fn run(config:Config)->Result<()>{
     fs::create_dir_all(&config.root)?;fs::create_dir_all(&config.output)?;
+    if config.ocr&&!visual::tesseract_available(){bail!("OCR is enabled but Tesseract is unavailable. Install Tesseract or set FRAMEFORGE_OCR=0.");}
     let sources=read_sources(&config.sources)?;if sources.is_empty(){bail!("No research sources found.");}
     let classifier=Classifier::new(config.root.join("classifications"),config.force,config.profile.clone())?;
     println!("╔══════════════════════════════════════════════════════════════╗");

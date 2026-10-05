@@ -34,7 +34,7 @@ It can be used for:
 - individual-video investigation;
 - whole-channel research.
 
-The engine is **domain-agnostic by design**. The repository ships with a general-purpose `default` profile and a `cs2` profile containing the project's original CS2 Academy filtering rules.
+The engine is **domain-agnostic by design**. The repository ships with a general-purpose `default` profile, and additional profiles can be supplied without changing the engine.
 
 ---
 
@@ -144,26 +144,6 @@ It recognizes common educational/informational language such as:
 
 It also down-ranks obvious entertainment-only material such as montages, highlights, vlogs, giveaways, and stream/reaction content.
 
-### `cs2`
-
-The CS2 profile preserves the original project's specialized filtering vocabulary:
-
-- aim;
-- movement;
-- counter-strafing;
-- crosshair;
-- recoil;
-- spray;
-- utility;
-- map control;
-- executes;
-- retakes;
-- rotations;
-- demo analysis;
-- and the original entertainment exclusions.
-
-Use it when running the CS2 Academy research corpus.
-
 ### Create your own
 
 Profiles are plain JSON.
@@ -196,12 +176,6 @@ https://www.youtube.com/watch?v=VIDEO_ID
 
 This means you can research an entire creator, a curated collection of creators, or a single video without changing the pipeline.
 
-For the included CS2 Academy setup, use:
-
-```bash
-cargo run --release -- run --profile profiles/cs2.json
-```
-
 ---
 
 ## 🧪 Usage
@@ -216,12 +190,6 @@ cargo run --release -- discover
 
 ```bash
 cargo run --release -- run
-```
-
-### Run the CS2 profile
-
-```bash
-cargo run --release -- run --profile profiles/cs2.json
 ```
 
 ### Validate an existing corpus
@@ -310,9 +278,7 @@ rather than reducing the source to an opaque summary.
 
 Concept extraction is profile-aware.
 
-The included `cs2` profile currently exposes the CS2 Academy concept catalog, including movement, aim, utility, positioning, trading, economy, map knowledge, executes, retakes, post-plant, mid-round decisions, information, demo review, and mental game.
-
-The generic profile uses a smaller domain-neutral concept layer for common educational structures such as:
+The default profile uses a domain-neutral concept layer for common educational structures such as:
 
 - Instruction
 - Fundamentals
@@ -444,7 +410,7 @@ The central design rule remains:
 
 **FrameForge core pipeline — research-ready.**
 
-The repository now provides a generic video research engine with configurable profiles, while preserving the specialized CS2 Academy workflow as an explicit profile rather than hard-coding CS2 into the product.
+The repository provides a generic video research engine with configurable profiles and no domain-specific assumptions in the default workflow.
 
 ---
 

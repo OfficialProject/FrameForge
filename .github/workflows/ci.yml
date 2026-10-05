@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: cs2-academy-${{ github.ref }}
+  group: frameforge-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
           deno-version: v2.6.0
       - name: Install yt-dlp with EJS support
         run: pipx install "yt-dlp[default]"
-      - run: cargo fmt --all
+      - run: cargo fmt --all -- --check
       - run: cargo test --all-targets
       - run: cargo build --release
       - run: ./target/release/frameforge --help

@@ -93,10 +93,16 @@ impl Classifier{
     fn score_components(&self,text:&str)->(i32,usize,usize,Vec<String>){
         let lower=text.to_lowercase();
         let(mut score,mut positive_count,mut negative_count,mut reasons)=(0,0,0,Vec::new());
-        for(term,weight,reason)in &self.profile.classification.positive{if lower.contains(term){score+=*weight;positive_count+=1;reasons.push(reason.clone());}}
-        for(term,weight,reason)in &self.profile.classification.negative{if lower.contains(term){score+=*weight;negative_count+=1;reasons.push(format!("negative: {reason}"));}}
+        for(term,weight,reason)in &self.profile.classification.positive{if matches_term(&lower,term){score+=*weight;positive_count+=1;reasons.push(reason.clone());}}
+        for(term,weight,reason)in &self.profile.classification.negative{if matches_term(&lower,term){score+=*weight;negative_count+=1;reasons.push(format!("negative: {reason}"));}}
         (score,positive_count,negative_count,reasons)
     }
+}
+
+fn matches_term(text:&str,term:&str)->bool{
+    let haystack=format!(" {} ",text.chars().map(|c|if c.is_ascii_alphanumeric(){c}else{' '}).collect::<String>());
+    let needle=format!(" {} ",term.to_lowercase().chars().map(|c|if c.is_ascii_alphanumeric(){c}else{' '}).collect::<String>());
+    haystack.contains(&needle)
 }
 
 #[derive(Clone,Copy)]enum Decision{Educational,NonEducational,Uncertain}
@@ -111,4 +117,5 @@ mod tests{
     #[test]fn educational(){assert!(matches!(classifier().quick_title("How to improve your workflow",false),Decision::Educational));}
     #[test]fn montage(){assert!(matches!(classifier().quick_title("Best highlights montage",false),Decision::NonEducational));}
     #[test]fn uncertain(){let(label,_,_)=classifier().score_text("Thoughts and observations",false);assert_eq!(label,"uncertain");}
+    #[test]fn avoids_substring_false_positive(){assert!(!matches_term("claiming a result","aim"));assert!(matches_term("aim fundamentals","aim"));}
 }
