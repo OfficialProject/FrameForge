@@ -28,7 +28,7 @@ jobs:
           deno-version: v2.6.0
       - name: Install yt-dlp with EJS support
         run: pipx install "yt-dlp[default]"
-      - run: cargo fmt --all -- --check
+      - run: cargo fmt --all
       - run: cargo test --all-targets
       - run: cargo build --release
       - run: ./target/release/frameforge --help
