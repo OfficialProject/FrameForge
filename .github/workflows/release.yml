@@ -69,7 +69,7 @@ jobs:
           Copy-Item "sources.txt" "dist/FrameForge/sources.txt"
           Copy-Item "README.md" "dist/FrameForge/README.md"
           Copy-Item "LICENSE" "dist/FrameForge/LICENSE"
-          Compress-Archive -Path "dist/FrameForge/*" -DestinationPath "dist/${{ matrix.archive }}" -Force
+          Compress-Archive -Path "dist/FrameForge" -DestinationPath "dist/${{ matrix.archive }}" -Force
 
       - name: Prepare Unix package
         if: runner.os != 'Windows'
