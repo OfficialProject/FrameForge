@@ -81,6 +81,89 @@ jobs:
           cp sources.txt README.md LICENSE "dist/FrameForge/"
           tar -C dist -czf "dist/${{ matrix.archive }}" FrameForge
 
+      - name: Smoke-test packaged executable on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $extract = Join-Path $env:RUNNER_TEMP "FrameForge smoke package"
+          $tools = Join-Path $env:RUNNER_TEMP "FrameForge smoke tools"
+          $cwd = Join-Path $env:RUNNER_TEMP "FrameForge smoke cwd"
+          $override = Join-Path $env:RUNNER_TEMP "FrameForge smoke override"
+          Remove-Item $extract,$tools,$cwd,$override -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $extract,$tools,$cwd,$override | Out-Null
+          Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath $extract -Force
+          $package = Join-Path $extract "FrameForge"
+          $exe = Join-Path $package "frameforge.exe"
+          foreach ($name in @("yt-dlp","ffmpeg","ffprobe","deno")) {
+            [IO.File]::WriteAllText((Join-Path $tools "$name.cmd"), "@echo off" + [Environment]::NewLine + "echo smoke" + [Environment]::NewLine + "exit /b 0")
+          }
+          $env:Path = "$tools;$env:Path"
+          Push-Location $cwd
+          try {
+            $doctor = & $exe doctor 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Packaged doctor failed: $doctor" }
+            if ($doctor -notmatch [regex]::Escape((Join-Path $package "sources.txt"))) { throw "Packaged runtime did not resolve sources.txt beside executable." }
+            if ($doctor -notmatch [regex]::Escape((Join-Path $package "profiles\default.json"))) { throw "Packaged runtime did not resolve profile beside executable." }
+            Set-Content -Path (Join-Path $override "sources.txt") -Value "# smoke"
+            Copy-Item (Join-Path $package "profiles\default.json") (Join-Path $override "profile.json")
+            $env:FRAMEFORGE_SOURCES = Join-Path $override "sources.txt"
+            $env:FRAMEFORGE_PROFILE = Join-Path $override "profile.json"
+            $overrideDoctor = & $exe doctor 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Environment override doctor failed: $overrideDoctor" }
+            if ($overrideDoctor -notmatch [regex]::Escape($env:FRAMEFORGE_SOURCES)) { throw "Sources environment override was ignored." }
+            if ($overrideDoctor -notmatch [regex]::Escape($env:FRAMEFORGE_PROFILE)) { throw "Profile environment override was ignored." }
+            $env:FRAMEFORGE_ROOT = Join-Path $override "root"
+            $env:FRAMEFORGE_OUTPUT = Join-Path $override "output"
+            & $exe run 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) { throw "Expected empty-source smoke run to fail." }
+            if (-not (Test-Path $env:FRAMEFORGE_ROOT)) { throw "Configured root directory was not created." }
+            if (-not (Test-Path $env:FRAMEFORGE_OUTPUT)) { throw "Configured output directory was not created." }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Smoke-test packaged executable on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          extract="$RUNNER_TEMP/FrameForge smoke package"
+          tools="$RUNNER_TEMP/FrameForge smoke tools"
+          cwd="$RUNNER_TEMP/FrameForge smoke cwd"
+          override="$RUNNER_TEMP/FrameForge smoke override"
+          rm -rf "$extract" "$tools" "$cwd" "$override"
+          mkdir -p "$extract" "$tools" "$cwd" "$override"
+          tar -xzf "dist/${{ matrix.archive }}" -C "$extract"
+          package="$extract/FrameForge"
+          exe="$package/frameforge"
+          for name in yt-dlp ffmpeg ffprobe deno; do
+            printf '#!/bin/sh\necho smoke\nexit 0\n' > "$tools/$name"
+            chmod +x "$tools/$name"
+          done
+          export PATH="$tools:$PATH"
+          pushd "$cwd" >/dev/null
+          doctor="$("$exe" doctor 2>&1)"
+          grep -F "$package/sources.txt" <<<"$doctor"
+          grep -F "$package/profiles/default.json" <<<"$doctor"
+          printf '# smoke\n' > "$override/sources.txt"
+          cp "$package/profiles/default.json" "$override/profile.json"
+          export FRAMEFORGE_SOURCES="$override/sources.txt"
+          export FRAMEFORGE_PROFILE="$override/profile.json"
+          override_doctor="$("$exe" doctor 2>&1)"
+          grep -F "$FRAMEFORGE_SOURCES" <<<"$override_doctor"
+          grep -F "$FRAMEFORGE_PROFILE" <<<"$override_doctor"
+          export FRAMEFORGE_ROOT="$override/root"
+          export FRAMEFORGE_OUTPUT="$override/output"
+          set +e
+          "$exe" run >/tmp/frameforge-run.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/frameforge-run.log
+          test "$status" -ne 0
+          test -d "$FRAMEFORGE_ROOT"
+          test -d "$FRAMEFORGE_OUTPUT"
+          popd >/dev/null
+
       - name: Upload build package
         uses: actions/upload-artifact@v6
         with:
