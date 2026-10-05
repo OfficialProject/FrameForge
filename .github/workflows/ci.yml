@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -16,18 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - name: Install media tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg tesseract-ocr
       - name: Install Deno for YouTube JavaScript challenges
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: v2.6.0
       - name: Install yt-dlp with EJS support
-        run: pipx install "yt-dlp[default]"
+        run: pipx install "yt-dlp[default]==2026.08.19"
       - run: cargo fmt --all
       - run: cargo test --all-targets
       - run: cargo build --release
