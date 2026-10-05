@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - name: Install media tools
         run: |
@@ -48,7 +50,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Verify generic fork is gone
         run: |
           test ! -d src/adapters
@@ -89,3 +93,20 @@ jobs:
         run: cargo install cargo-audit --version 0.22.2 --locked
       - name: RustSec audit
         run: cargo audit
+
+  cross-platform-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Run Rust test suite
+        run: cargo test --all-targets
+      - name: Build release binary
+        run: cargo build --release
