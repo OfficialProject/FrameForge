@@ -36,7 +36,7 @@ pub fn discover_channel(channel:&str)->Result<Vec<VideoCandidate>>{
     for tab in ["videos","shorts"]{
         let args=vec!["--no-warnings".into(),"--ignore-config".into(),"--flat-playlist".into(),"--dump-single-json".into(),"--skip-download".into(),"--ignore-errors".into(),format!("{}/{}",channel.trim_end_matches('/'),tab)];
         let output=run(&args)?;
-        if !output.status.success()&&output.stdout.is_empty(){bail!("yt-dlp discovery failed: {}",String::from_utf8_lossy(&output.stderr).trim());}
+        if !output.status.success(){bail!("yt-dlp discovery failed: {}",String::from_utf8_lossy(&output.stderr).trim());}
         let root:Value=serde_json::from_slice(&output.stdout).context("invalid yt-dlp playlist JSON")?;
         if let Some(entries)=root.get("entries").and_then(Value::as_array){for entry in entries{
             let id=entry.get("id").and_then(Value::as_str).unwrap_or_default();if id.is_empty(){continue;}validate_video_id(id)?;
@@ -52,7 +52,7 @@ pub fn discover_channel(channel:&str)->Result<Vec<VideoCandidate>>{
 pub fn fetch_metadata_and_transcript(url:&str)->Result<(VideoMetadata,Vec<TranscriptEntry>)>{
     let dir=temp_dir("frameforge-meta")?;
     let args=vec!["--no-warnings".into(),"--ignore-config".into(),"--no-simulate".into(),"--skip-download".into(),"--dump-single-json".into(),"--write-subs".into(),"--write-auto-subs".into(),"--sub-format".into(),"vtt".into(),"--sub-langs".into(),"en.*".into(),"-o".into(),dir.join("captions").to_string_lossy().into_owned(),url.into()];
-    let result=(||{let output=run(&args)?;if !output.status.success(){bail!("yt-dlp metadata retrieval failed: {}",String::from_utf8_lossy(&output.stderr).trim());}let stdout=String::from_utf8_lossy(&output.stdout);let line=stdout.lines().rev().find(|l|l.trim_start().starts_with('{')).ok_or_else(||anyhow!("yt-dlp returned no metadata JSON"))?;let info:Value=serde_json::from_str(line).context("invalid video metadata JSON")?;let metadata=VideoMetadata{title:info.get("title").and_then(Value::as_str).unwrap_or_default().into(),description:info.get("description").and_then(Value::as_str).unwrap_or_default().into(),duration:info.get("duration").and_then(Value::as_f64),upload_date:info.get("upload_date").and_then(Value::as_str).map(str::to_owned)};let transcript=read_best_vtt(&dir)?.map(|v|parse_vtt(&v)).unwrap_or_default();Ok((metadata,transcript))})();let _=fs::remove_dir_all(&dir);result
+    let result=(||{let output=run(&args)?;let stdout=String::from_utf8_lossy(&output.stdout);let line=stdout.lines().rev().find(|l|l.trim_start().starts_with('{')).ok_or_else(||anyhow!("yt-dlp returned no metadata JSON"))?;let info:Value=serde_json::from_str(line).context("invalid video metadata JSON")?;let metadata=VideoMetadata{title:info.get("title").and_then(Value::as_str).unwrap_or_default().into(),description:info.get("description").and_then(Value::as_str).unwrap_or_default().into(),duration:info.get("duration").and_then(Value::as_f64),upload_date:info.get("upload_date").and_then(Value::as_str).map(str::to_owned)};let transcript=read_best_vtt(&dir)?.map(|v|parse_vtt(&v)).unwrap_or_default();Ok((metadata,transcript))})();let _=fs::remove_dir_all(&dir);result
 }
 pub fn download_video(url:&str,dir:&Path)->Result<PathBuf>{
     fs::create_dir_all(dir)?;if let Some(existing)=existing_source(dir){return Ok(existing);}
@@ -61,7 +61,12 @@ pub fn download_video(url:&str,dir:&Path)->Result<PathBuf>{
     existing_source(dir).ok_or_else(||anyhow!("yt-dlp produced no usable source video"))
 }
 fn existing_source(dir:&Path)->Option<PathBuf>{fs::read_dir(dir).ok()?.filter_map(Result::ok).map(|e|e.path()).filter(|p|p.file_name().and_then(|n|n.to_str()).map(|n|n.starts_with("source.")).unwrap_or(false)&&p.extension().is_some()).find(|p|fs::metadata(p).map(|m|m.len()>0).unwrap_or(false)&&probe_media(p))}
-fn probe_media(path:&Path)->bool{Command::new("ffprobe").args(["-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1"]).arg(path).output().map(|o|o.status.success()).unwrap_or(false)}
+fn probe_media(path:&Path)->bool{
+    let Ok(output)=Command::new("ffprobe").args(["-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1"]).arg(path).output() else{return false;};
+    if !output.status.success(){return false;}
+    let Ok(duration)=String::from_utf8_lossy(&output.stdout).trim().parse::<f64>() else{return false;};
+    duration.is_finite()&&duration>=0.0
+}
 fn read_best_vtt(dir:&Path)->Result<Option<String>>{let mut files=fs::read_dir(dir)?.filter_map(Result::ok).map(|e|e.path()).filter(|p|p.extension().and_then(|x|x.to_str())==Some("vtt")).collect::<Vec<_>>();files.sort();let p=files.iter().find(|p|p.file_name().and_then(|n|n.to_str()).map(|n|n.contains(".en")).unwrap_or(false)).cloned().or_else(||files.into_iter().next());p.map(fs::read_to_string).transpose().map_err(Into::into)}
 fn temp_dir(prefix:&str)->Result<PathBuf>{let stamp=SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();let dir=std::env::temp_dir().join(format!("{prefix}-{stamp}-{}",std::process::id()));fs::create_dir_all(&dir)?;Ok(dir)}
 #[cfg(test)]mod tests{use super::{normalize_url,validate_video_id};#[test]fn normalizes_id(){assert_eq!(normalize_url("dQw4w9WgXcQ","dQw4w9WgXcQ"),"https://www.youtube.com/watch?v=dQw4w9WgXcQ");}#[test]fn preserves_non_youtube_url(){assert_eq!(normalize_url("https://example.com/video","abc"),"https://example.com/video");}
