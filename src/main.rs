@@ -164,6 +164,7 @@ fn research_cache_current(dir:&Path,record:&ClassificationRecord,config:&Config)
     let Ok(value)=read_json::<serde_json::Value>(&dir.join("analysis.json")) else{return false;};
     value.get("schemaVersion").and_then(serde_json::Value::as_u64)==Some(3)
         && value.pointer("/pipeline/version").and_then(serde_json::Value::as_u64)==Some(PIPELINE_VERSION as u64)
+        && value.pointer("/pipeline/profile").and_then(serde_json::Value::as_str)==Some(config.profile.file_stem().and_then(|s|s.to_str()).unwrap_or("default"))
         && value.pointer("/pipeline/profileFingerprint").and_then(serde_json::Value::as_str)==Some(record.classification.profile_fingerprint.as_str())
         && value.pointer("/pipeline/classificationVersion").and_then(serde_json::Value::as_u64)==Some(record.classification.classifier_version as u64)
         && value.pointer("/pipeline/ocrEnabled").and_then(serde_json::Value::as_bool)==Some(config.ocr)
