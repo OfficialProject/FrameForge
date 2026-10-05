@@ -27,6 +27,8 @@ struct Rules{
 
 pub struct Classifier{root:PathBuf,force:bool,profile:Profile,profile_fingerprint:String}
 
+struct FinishData{metadata:Option<crate::model::VideoMetadata>,transcript:Vec<crate::model::TranscriptEntry>,label:&'static str,score:i32,reasons:Vec<String>,transcript_used:bool}
+
 impl Classifier{
     pub fn new(root:PathBuf,force:bool,profile_path:PathBuf)->Result<Self>{
         fs::create_dir_all(&root)?;
@@ -49,20 +51,21 @@ impl Classifier{
             }
         }
         match self.quick_title(&video.title,video.is_short){
-            Decision::Educational=>self.finish(video,None,Vec::new(),"educational",10,vec!["strong title evidence".into()],false),
-            Decision::NonEducational=>self.finish(video,None,Vec::new(),"non_educational",-10,vec!["strong negative title evidence".into()],false),
+            Decision::Educational=>self.finish(video,FinishData{metadata:None,transcript:Vec::new(),label:"educational",score:10,reasons:vec!["strong title evidence".into()],transcript_used:false}),
+            Decision::NonEducational=>self.finish(video,FinishData{metadata:None,transcript:Vec::new(),label:"non_educational",score:-10,reasons:vec!["strong negative title evidence".into()],transcript_used:false}),
             Decision::Uncertain=>match ytdlp::fetch_metadata_and_transcript(&video.url){
                 Ok((metadata,transcript))=>{
                     let body=transcript.iter().map(|e|e.text.as_str()).collect::<Vec<_>>().join(" ");
                     let(label,score,reasons)=self.score_text(&format!("{}\n{}\n{}",metadata.title,metadata.description,body),video.is_short);
-                    self.finish(video,Some(metadata),transcript,label,score,reasons,true)
+                    self.finish(video,FinishData{metadata:Some(metadata),transcript,label,score,reasons,transcript_used:true})
                 }
-                Err(e)=>self.finish(video,None,Vec::new(),"uncertain",0,vec![format!("classification evidence unavailable: {e}")],false),
+                Err(e)=>self.finish(video,FinishData{metadata:None,transcript:Vec::new(),label:"uncertain",score:0,reasons:vec![format!("classification evidence unavailable: {e}")],transcript_used:false}),
             },
         }
     }
 
-    fn finish(&self,video:&VideoCandidate,metadata:Option<crate::model::VideoMetadata>,transcript:Vec<crate::model::TranscriptEntry>,label:&str,score:i32,reasons:Vec<String>,transcript_used:bool)->Result<ClassificationRecord>{
+    fn finish(&self,video:&VideoCandidate,data:FinishData)->Result<ClassificationRecord>{
+        let FinishData{metadata,transcript,label,score,reasons,transcript_used}=data;
         let record=ClassificationRecord{
             video:video.clone(),metadata,transcript,
             classification:Classification{label:label.into(),score,reasons,transcript_used,keep_for_research:label!="non_educational",classifier_version:VERSION,profile:self.profile.name.clone(),profile_fingerprint:self.profile_fingerprint.clone()}
