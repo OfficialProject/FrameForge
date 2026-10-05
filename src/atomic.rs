@@ -25,9 +25,10 @@ pub fn write(path:&Path,data:&[u8])->Result<()>{
 mod tests {
     use super::write;
     use std::fs;
+    use std::time::{SystemTime,UNIX_EPOCH};
     #[test]
     fn writes_and_replaces() {
-        let path=std::env::temp_dir().join(format!("frameforge-atomic-test-{}.json",std::process::id()));
+        let path=std::env::temp_dir().join(format!("frameforge-atomic-test-{}.json",SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
         write(&path,b"first").unwrap();
         assert_eq!(fs::read(&path).unwrap(),b"first");
         write(&path,b"second").unwrap();
