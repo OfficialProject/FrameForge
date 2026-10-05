@@ -1,5 +1,5 @@
 use crate::model::{Classification, OcrRecord, TranscriptEntry, VideoCandidate, VideoMetadata};
-use anyhow::Result;
+use anyhow::{bail,Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -169,19 +169,16 @@ pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], prof
         let path = output.join(&record.video.id).join("analysis.json");
         if !path.is_file() { continue; }
         let value: Value = serde_json::from_slice(&fs::read(&path)?)?;
-        let concepts = value.get("concepts").and_then(Value::as_array).cloned().unwrap_or_default();
-
+        let concepts:Vec<ConceptRecord>=serde_json::from_value(value.get("concepts").cloned().unwrap_or_else(||Value::Array(Vec::new())))?;
         for concept in concepts {
-            let id = concept.get("id").and_then(Value::as_str).unwrap_or_default();
-            if id.is_empty() { continue; }
-            let name = concept.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
-            let category = concept.get("category").and_then(Value::as_str).unwrap_or_default().to_string();
-            let level = concept.get("level").and_then(Value::as_u64).unwrap_or(1) as u8;
-            let mentions = concept.get("mention_count").and_then(Value::as_u64).unwrap_or(0) as usize;
-            let score = concept.get("evidence_score").and_then(Value::as_f64).unwrap_or(0.0);
-            let prerequisites = concept.get("prerequisites").and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
-                .unwrap_or_default();
+            let id=concept.id;
+            let name=concept.name;
+            let category=concept.category;
+            let level=concept.level;
+            let mentions=concept.mention_count;
+            let score=concept.evidence_score;
+            if !score.is_finite()||score<0.0{bail!("invalid evidence score for concept {id}");}
+            let prerequisites=concept.prerequisites;
             let entry = aggregate.entry(id.into()).or_insert((name, category, level, prerequisites, 0, 0.0, 0));
             entry.4 += mentions;
             entry.5 += score;
@@ -211,7 +208,7 @@ pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], prof
             .then_with(|| a.get("id").and_then(Value::as_str).cmp(&b.get("id").and_then(Value::as_str)))
     });
 
-    let learning_order = prerequisite_learning_order(&concepts);
+    let learning_order = prerequisite_learning_order(&concepts)?;
     let catalog = serde_json::json!({
         "schemaVersion": 3,
         "generatedAt": crate::registry::unix_seconds(),
@@ -226,11 +223,11 @@ pub fn build(output: &Path, records: &[crate::model::ClassificationRecord], prof
     });
 
     let path = output.join("research_catalog.json");
-    fs::write(&path, serde_json::to_vec_pretty(&catalog)?)?;
-    Ok(path)
+    let temp=output.join(format!(".research_catalog.json.tmp.{}",std::process::id()));
+    fs::write(&temp,serde_json::to_vec_pretty(&catalog)?)?;fs::rename(temp,&path)?;Ok(path)
 }
 
-fn prerequisite_learning_order(concepts: &[Value]) -> Vec<String> {
+fn prerequisite_learning_order(concepts: &[Value]) -> Result<Vec<String>> {
     let ids: HashSet<String> = concepts.iter()
         .filter_map(|c| c.get("id").and_then(Value::as_str).map(str::to_owned))
         .collect();
@@ -245,9 +242,7 @@ fn prerequisite_learning_order(concepts: &[Value]) -> Vec<String> {
             if satisfied { Some(concept) } else { None }
         }).collect::<Vec<_>>();
 
-        if ready.is_empty() {
-            ready = remaining.iter().filter_map(|id| concepts.iter().find(|c| c.get("id").and_then(Value::as_str) == Some(id.as_str()))).collect();
-        }
+        if ready.is_empty(){bail!("concept prerequisite graph contains a cycle or unsatisfiable prerequisite");}
 
         ready.sort_by(|a, b| {
             let level_a = a.get("level").and_then(Value::as_u64).unwrap_or(99);
@@ -264,7 +259,7 @@ fn prerequisite_learning_order(concepts: &[Value]) -> Vec<String> {
             if remaining.remove(&id) { order.push(id); }
         }
     }
-    order
+    Ok(order)
 }
 
 #[cfg(test)]
@@ -283,8 +278,8 @@ mod tests {
             serde_json::json!({"id":"alpha","level":1,"importanceScore":10.0,"prerequisites":[]}),
             serde_json::json!({"id":"base","level":1,"importanceScore":1.0,"prerequisites":[]}),
         ];
-        let first = prerequisite_learning_order(&concepts);
-        assert_eq!(first, prerequisite_learning_order(&concepts));
+        let first = prerequisite_learning_order(&concepts).unwrap();
+        assert_eq!(first, prerequisite_learning_order(&concepts).unwrap());
         assert!(first.iter().position(|id| id == "base").unwrap() < first.iter().position(|id| id == "advanced").unwrap());
         assert!(first.iter().position(|id| id == "alpha").unwrap() < first.iter().position(|id| id == "zeta").unwrap());
     }

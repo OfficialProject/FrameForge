@@ -14,10 +14,11 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
     if !manifest_path.is_file(){bail!("missing {}",manifest_path.display());}
     if !catalog_path.is_file(){bail!("missing {}",catalog_path.display());}
     let manifest:Value=serde_json::from_slice(&fs::read(&manifest_path)?)?;
-    if manifest.get("schemaVersion").and_then(Value::as_u64).unwrap_or(0)<2{bail!("manifest has an unsupported schema version");}
+    if manifest.get("schemaVersion").and_then(Value::as_u64)!=Some(3){bail!("manifest has an unsupported schema version");}
+    let manifest_profile=manifest.get("profile").and_then(Value::as_str).context("manifest.profile must be a string")?;
     let videos=manifest.get("videos").and_then(Value::as_array).context("manifest.videos must be an array")?;
     let catalog:Value=serde_json::from_slice(&fs::read(&catalog_path)?)?;
-    if catalog.get("schemaVersion").and_then(Value::as_u64).unwrap_or(0)<2{bail!("research catalog has an unsupported schema version");}
+    if catalog.get("schemaVersion").and_then(Value::as_u64)!=Some(3){bail!("research catalog has an unsupported schema version");}
     let learning_order=catalog.get("learningOrder").and_then(Value::as_array).context("research catalog has no learningOrder")?;
     let catalog_concepts=catalog.get("concepts").and_then(Value::as_array).context("research catalog has no concepts")?;
     let mut concept_ids=HashSet::new();
@@ -43,8 +44,10 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
             if positions[pid]>=positions[id]{bail!("learningOrder violates prerequisite {pid} -> {id}");}
         }
     }
+    let mut manifest_ids=HashSet::new();
     for video in videos{
         let id=video.get("id").and_then(Value::as_str).context("manifest video is missing id")?;
+        if !manifest_ids.insert(id.to_string()){bail!("manifest contains duplicate video {id}");}
         let state_value=video.get("state").context("manifest video is missing state")?;
         let state:State=serde_json::from_value(state_value.clone()).context("manifest video has invalid state")?;
         if state.status!="complete"||state.stage!="complete"{bail!("video {id} is not complete");}
@@ -93,7 +96,7 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
         }
         let concepts:Value=serde_json::from_slice(&fs::read(dir.join("concepts.json"))?)?;
         if !concepts.is_array(){bail!("video {id} concepts.json must be an array");}
-        for concept in concepts.as_array().unwrap(){
+        for concept in concepts.as_array().context("video concepts.json must be an array")?{
             if concept.get("id").and_then(Value::as_str).is_none(){bail!("video {id} has a concept without an id");}
             if concept.get("evidence").and_then(Value::as_array).is_none(){bail!("video {id} has a concept without evidence");}
         }
