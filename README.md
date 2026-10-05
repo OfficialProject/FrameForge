@@ -92,7 +92,7 @@ That keeps the pipeline practical without sacrificing the evidence model.
 
 ### Recall with precision
 
-Filtering is deliberately customizable to a users specific needs. By default, strong candidates are retained, and uncertain candidates remain eligible for research rather than being silently discarded.
+Filtering is deliberately customizable to a user's specific needs. By default, strong candidates are retained, and uncertain candidates remain eligible for research rather than being silently discarded.
 
 ### Shorts are eligible
 
@@ -216,8 +216,8 @@ cargo run --release -- run --force
 | Output | `frameforge-output/` | Research corpus |
 | Classification workers | 6 | Lightweight concurrent filtering |
 | Research workers | 2 | Expensive video processing |
-| OCR | enabled | OCR every retained frame |
-| Source retention | disabled | Remove downloaded source media after extraction |
+| OCR | disabled | Enable with `FRAMEFORGE_OCR=1` |
+| Source retention | disabled | Keep downloaded source media with `FRAMEFORGE_KEEP_VIDEO=1` |
 | Visual sampling | 1 FPS | Exhaustive full-duration sampling |
 | Shorts | eligible | Profile decides whether they are retained |
 
@@ -231,7 +231,7 @@ FRAMEFORGE_OUTPUT
 FRAMEFORGE_CLASSIFY_CONCURRENCY
 FRAMEFORGE_RESEARCH_CONCURRENCY
 FRAMEFORGE_FORCE_REFRESH=1
-FRAMEFORGE_OCR=0
+FRAMEFORGE_OCR=1
 FRAMEFORGE_KEEP_VIDEO=1
 ```
 
@@ -242,7 +242,7 @@ FRAMEFORGE_KEEP_VIDEO=1
 Each retained video produces a structured evidence package:
 
 ```
-.research/
+.frameforge/
 ├── classifications/
 │   └── <video-id>.json
 └── state/
@@ -261,8 +261,8 @@ frameforge-output/
     ├── concepts.json
     ├── analysis.json
     └── frames/
-        ├── 000000.jpg
-        ├── 000001.jpg
+        ├── frame-000000.jpg
+        ├── frame-000001.jpg
         └── ...
 ```
 
@@ -328,7 +328,8 @@ Before reporting success, FrameForge verifies:
 - schema versions;
 - provenance/video identity;
 - exhaustive visual coverage;
-- frame-file existence;
+- frame-file existence and containment;
+- transcript and OCR structure;
 - concept evidence structure;
 - learning-order references.
 
@@ -360,7 +361,7 @@ A successful run therefore means **the generated corpus passed integrity checks*
 - **Deno 2.6+**
 - **FFmpeg**
 - **FFprobe**
-- **Tesseract** for OCR
+- **Tesseract** only when OCR is enabled
 
 ---
 
