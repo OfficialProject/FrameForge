@@ -87,8 +87,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - name: Resolve dependency lockfile for audit
-        run: cargo generate-lockfile
+      - name: Verify dependency lockfile
+        run: |
+          cargo generate-lockfile
+          git diff --exit-code -- Cargo.lock
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
       - name: RustSec audit
