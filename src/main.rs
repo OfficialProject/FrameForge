@@ -87,7 +87,8 @@ fn run(config:Config)->Result<()>{
             for source in &video.source_channels{if !v.source_channels.contains(source){v.source_channels.push(source.clone());}}
         }).or_insert(video);
     }
-    let candidates:Vec<_>=unique.into_values().collect();
+    let mut candidates:Vec<_>=unique.into_values().collect();
+    candidates.sort_by(|a,b|a.id.cmp(&b.id));
     println!("Unique candidates: {}",candidates.len());
     let done=AtomicUsize::new(0);
     let pool=rayon::ThreadPoolBuilder::new().num_threads(config.classify_concurrency).build()?;
@@ -133,17 +134,16 @@ fn research_one(record:&ClassificationRecord,config:&Config,registry:&Registry)-
             let visual=visual::extract_exhaustive_1fps(&source,&frames_dir)?;write_json(&visual_path,&visual)?;registry.mark_stage(id,Stage::Visual)?;visual
         };
         let ocr_path=dir.join("ocr.json");
-        let ocr=if !config.force&&config.ocr&&registry.stage_at_least(id,Stage::Ocr)&&ocr_path.is_file(){read_json(&ocr_path)?}else if config.ocr{
+        let ocr=if !config.force&&config.ocr&&registry.stage_at_least(id,Stage::Ocr)&&valid_ocr_cache(&dir,&ocr_path)?{read_json(&ocr_path)?}else if config.ocr{
             let ocr=visual::ocr_frames(&frames_dir,&visual)?;write_json(&ocr_path,&ocr)?;registry.mark_stage(id,Stage::Ocr)?;ocr
         }else{write_json(&ocr_path,&Vec::<model::OcrRecord>::new())?;registry.mark_stage(id,Stage::Ocr)?;Vec::new()};
         let mut warnings=visual.warnings.clone();
-        if config.ocr&&!visual::tesseract_available(){warnings.push("Tesseract is unavailable; OCR was skipped.".into());}
         if dir.join("evidence_warning.txt").is_file(){warnings.push(fs::read_to_string(dir.join("evidence_warning.txt"))?);}
         let concepts=catalog::extract(&record.video,&metadata,&transcript,&ocr,&record.classification,config.profile.file_stem().and_then(|s|s.to_str()).unwrap_or("default"));
         write_json(&dir.join("concepts.json"),&concepts)?;
         let research=serde_json::json!({
             "schemaVersion":3,
-            "pipeline":{"name":"FrameForge","version":PIPELINE_VERSION,"profile":config.profile.file_stem().and_then(|s|s.to_str()).unwrap_or("default"),"classificationVersion":record.classification.classifier_version,"visualSampling":"exhaustive_1fps","ocrEnabled":config.ocr,"generatedAt":registry::unix_seconds(),"tools":tool_versions()},
+            "pipeline":{"name":"FrameForge","version":PIPELINE_VERSION,"profile":config.profile.file_stem().and_then(|s|s.to_str()).unwrap_or("default"),"classificationVersion":record.classification.classifier_version,"profileFingerprint":record.classification.profile_fingerprint,"visualSampling":"exhaustive_1fps","ocrEnabled":config.ocr,"generatedAt":registry::unix_seconds(),"tools":tool_versions()},
             "provenance":{"sourceUrl":record.video.url,"videoId":record.video.id,"sourceChannels":record.video.source_channels,"evidence":{"title":record.video.title,"metadataFile":"metadata.json","transcriptFile":"transcript.json","frameDirectory":"frames/","ocrFile":"ocr.json","conceptsFile":"concepts.json"}},
             "video":record.video,"metadata":metadata,"classification":record.classification,
             "coverage":{"mode":"exhaustive","visualSamplingFps":1,"expectedVisualSamples":visual.expected_samples,"sampledVisualSamples":visual.sampled_samples,"visualCoverageComplete":visual.expected_samples==0||visual.sampled_samples>=visual.expected_samples},
@@ -160,6 +160,30 @@ fn fetch_evidence(record:&ClassificationRecord,dir:&Path)->Result<(Option<model:
     let(metadata,transcript)=if record.metadata.is_some()||!record.transcript.is_empty(){(record.metadata.clone(),record.transcript.clone())}else{match ytdlp::fetch_metadata_and_transcript(&record.video.url){Ok((metadata,transcript))=>(Some(metadata),transcript),Err(error)=>{fs::write(dir.join("evidence_warning.txt"),format!("Metadata/transcript retrieval failed: {error}"))?;(None,Vec::new())}}};
     write_json(&dir.join("metadata.json"),&metadata)?;write_json(&dir.join("transcript.json"),&transcript)?;Ok((metadata,transcript))
 }
+fn research_cache_current(dir:&Path,record:&ClassificationRecord,config:&Config)->bool{
+    let Ok(value)=read_json::<serde_json::Value>(&dir.join("analysis.json")) else{return false;};
+    value.get("schemaVersion").and_then(serde_json::Value::as_u64)==Some(3)
+        && value.pointer("/pipeline/version").and_then(serde_json::Value::as_u64)==Some(PIPELINE_VERSION as u64)
+        && value.pointer("/pipeline/profileFingerprint").and_then(serde_json::Value::as_str)==Some(record.classification.profile_fingerprint.as_str())
+        && value.pointer("/pipeline/classificationVersion").and_then(serde_json::Value::as_u64)==Some(record.classification.classifier_version as u64)
+        && value.pointer("/pipeline/ocrEnabled").and_then(serde_json::Value::as_bool)==Some(config.ocr)
+        && value.pointer("/provenance/videoId").and_then(serde_json::Value::as_str)==Some(record.video.id.as_str())
+        && value.pointer("/provenance/sourceUrl").and_then(serde_json::Value::as_str)==Some(record.video.url.as_str())
+        && value.pointer("/video/title").and_then(serde_json::Value::as_str)==Some(record.video.title.as_str())
+        && value.pointer("/video/is_short").and_then(serde_json::Value::as_bool)==Some(record.video.is_short)
+}
+fn valid_ocr_cache(dir:&Path,ocr_path:&Path)->Result<bool>{
+    if !ocr_path.is_file(){return Ok(false);}
+    let Ok(entries)=read_json::<Vec<model::OcrRecord>>(ocr_path) else{return Ok(false);};
+    let Ok(analysis)=read_json::<serde_json::Value>(&dir.join("analysis.json")) else{return Ok(false);};
+    if analysis.pointer("/pipeline/ocrEnabled").and_then(serde_json::Value::as_bool)!=Some(true){return Ok(false);}
+    let mut previous=-1.0;
+    for entry in entries{
+        if !entry.time.is_finite()||entry.time<0.0||entry.text.trim().is_empty()||entry.time<previous{return Ok(false);}
+        previous=entry.time;
+    }
+    Ok(true)
+}
 fn valid_visual_cache(visual_path:&Path,frames_dir:&Path)->Result<bool>{
     if !visual_path.is_file(){return Ok(false);}let visual:model::VisualResult=read_json(visual_path)?;
     if visual.expected_samples>0&&visual.sampled_samples<visual.expected_samples{return Ok(false);}
@@ -168,6 +192,9 @@ fn valid_visual_cache(visual_path:&Path,frames_dir:&Path)->Result<bool>{
 }
 fn tool_versions()->serde_json::Value{serde_json::json!({"yt-dlp":command_version("yt-dlp",&["--version"]),"ffmpeg":command_version("ffmpeg",&["-version"]),"ffprobe":command_version("ffprobe",&["-version"]),"tesseract":command_version("tesseract",&["--version"])})}
 fn command_version(command:&str,args:&[&str])->Option<String>{std::process::Command::new(command).args(args).output().ok().filter(|o|o.status.success()).and_then(|o|String::from_utf8(o.stdout).ok()).and_then(|s|s.lines().next().map(str::to_owned))}
-fn write_json<T:serde::Serialize>(path:&Path,value:&T)->Result<()>{fs::write(path,serde_json::to_vec_pretty(value)?)?;Ok(())}
+fn write_json<T:serde::Serialize>(path:&Path,value:&T)->Result<()>{
+    let temp=path.with_file_name(format!(".{}.tmp.{}",path.file_name().and_then(|n|n.to_str()).unwrap_or("frameforge.json"),std::process::id()));
+    fs::write(&temp,serde_json::to_vec_pretty(value)?)?;fs::rename(temp,path)?;Ok(())
+}
 fn read_json<T:for<'de>serde::Deserialize<'de>>(path:&Path)->Result<T>{Ok(serde_json::from_slice(&fs::read(path)?)?)}
 fn read_sources(path:&Path)->Result<Vec<String>>{let text=fs::read_to_string(path).with_context(||format!("cannot read {}",path.display()))?;Ok(text.lines().map(str::trim).filter(|l|!l.is_empty()&&!l.starts_with('#')).map(ToOwned::to_owned).collect())}

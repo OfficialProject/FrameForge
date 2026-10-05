@@ -59,14 +59,16 @@ fn collapse(entries: Vec<TranscriptEntry>) -> Vec<TranscriptEntry> {
     for mut entry in entries {
         let text = entry.text.trim().to_string();
         if text.is_empty() { continue; }
+        let previous_chars: Vec<char> = previous.chars().collect();
+        let text_chars: Vec<char> = text.chars().collect();
         let mut overlap = 0usize;
-        for n in (1..=previous.len().min(text.len())).rev() {
-            if n < text.len() && text.as_bytes()[n] != b' ' { continue; }
-            let cut = previous.len() - n;
-            if cut > 0 && previous.as_bytes()[cut - 1] != b' ' { continue; }
-            if previous.ends_with(&text[..n]) { overlap = n; break; }
+        for n in (1..=previous_chars.len().min(text_chars.len())).rev() {
+            if n < text_chars.len() && text_chars[n] != ' ' { continue; }
+            let cut = previous_chars.len() - n;
+            if cut > 0 && previous_chars[cut - 1] != ' ' { continue; }
+            if previous_chars[cut..] == text_chars[..n] { overlap = n; break; }
         }
-        entry.text = text[overlap..].trim().to_string();
+        entry.text = text_chars[overlap..].iter().collect::<String>().trim().to_string();
         previous = text;
         if !entry.text.is_empty() { out.push(entry); }
     }
@@ -89,5 +91,11 @@ world this is CS2
         let result = parse_vtt(input);
         assert_eq!(result[0].text, "Hello world");
         assert_eq!(result[1].text, "this is CS2");
+    }
+    #[test]
+    fn unicode_overlap_is_safe() {
+        let input = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello 🌎\n\n00:00:01.000 --> 00:00:03.000\n🌎 world\n";
+        let result = parse_vtt(input);
+        assert_eq!(result[1].text, "world");
     }
 }

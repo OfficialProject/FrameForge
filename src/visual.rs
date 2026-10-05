@@ -27,11 +27,13 @@ fn ffprobe_duration(video:&Path)->Result<f64>{
 }
 pub fn tesseract_available()->bool{Command::new("tesseract").arg("--version").output().map(|o|o.status.success()).unwrap_or(false)}
 pub fn ocr_frames(frames_dir:&Path,visual:&VisualResult)->Result<Vec<OcrRecord>>{
-    if !tesseract_available(){return Ok(Vec::new());}
-    Ok(visual.frames.par_iter().filter_map(|frame|{
+    if !tesseract_available(){return Err(anyhow!("Tesseract is required for OCR but was not found on PATH"));}
+    visual.frames.par_iter().map(|frame|{
         let path=frames_dir.parent().unwrap_or(frames_dir).join(&frame.path);
-        let output=Command::new("tesseract").arg(&path).arg("stdout").arg("-l").arg("eng").arg("--psm").arg("6").output().ok()?;
+        let output=Command::new("tesseract").arg(&path).arg("stdout").arg("-l").arg("eng").arg("--psm").arg("6").output()
+            .with_context(||format!("failed to execute Tesseract for {}",frame.path))?;
+        if !output.status.success(){return Err(anyhow!("Tesseract failed for {}: {}",frame.path,String::from_utf8_lossy(&output.stderr).trim()));}
         let text=String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if text.len()>3{Some(OcrRecord{time:frame.time,text})}else{None}
-    }).collect())
+        Ok(if text.len()>3{Some(OcrRecord{time:frame.time,text})}else{None})
+    }).collect::<Result<Vec<_>>>().map(|items|items.into_iter().flatten().collect())
 }
