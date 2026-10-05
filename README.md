@@ -26,7 +26,7 @@ It can be used for:
 
 - educational-video research;
 - tutorial and course analysis;
-- creator/content research;
+- content research;
 - visual demonstrations;
 - training material;
 - technical walkthroughs;
@@ -34,7 +34,7 @@ It can be used for:
 - individual-video investigation;
 - whole-channel research.
 
-The engine is **domain-agnostic by design**. The repository ships with a general-purpose `default` profile, and additional profiles can be supplied without changing the engine.
+The engine is **domain-agnostic by design**. The repository ships with a general-purpose `default` profile, and additional profiles can be configured without changing the engine.
 
 ---
 
@@ -90,13 +90,13 @@ That keeps the pipeline practical without sacrificing the evidence model.
 
 ## ◇ Core principles
 
-### Recall before precision
+### Recall with precision
 
-Filtering is deliberately conservative. Strong candidates are retained, and uncertain candidates remain eligible for research rather than being silently discarded.
+Filtering is deliberately customizable to a users specific needs. By default, strong candidates are retained, and uncertain candidates remain eligible for research rather than being silently discarded.
 
 ### Shorts are eligible
 
-Short-form videos are not automatically excluded. Whether they are retained is controlled by the selected profile.
+Short-form videos are not automatically excluded. Whether they are retained is controlled by the selected profile or configured filters.
 
 ### Stable identity
 
@@ -274,25 +274,6 @@ rather than reducing the source to an opaque summary.
 
 ---
 
-## ◇ Concept analysis
-
-Concept extraction is profile-aware.
-
-The default profile uses a domain-neutral concept layer for common educational structures such as:
-
-- Instruction
-- Fundamentals
-- Technique
-- Strategy
-- Mistakes and Pitfalls
-- Analysis
-- Tools and Setup
-- Advanced Concepts
-
-This layer is intentionally replaceable. The evidence system does not depend on one subject area.
-
----
-
 ## 🔬 Why the visual stage is exhaustive
 
 FrameForge samples retained videos at **1 FPS across the complete duration**.
@@ -392,12 +373,8 @@ FrameForge is intentionally structured so future work can add:
 - speaker/source attribution;
 - cross-source agreement;
 - contradiction detection;
-- stronger concept extraction;
-- custom concept catalogs;
 - Parquet/DuckDB exports;
 - research dashboards;
-- coach/reviewer workflows;
-- curriculum generation;
 - additional video sources.
 
 The central design rule remains:
