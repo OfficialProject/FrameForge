@@ -232,8 +232,8 @@ mod tests {
     use super::*;
     #[test]
     fn normalized_matching_respects_word_boundaries() {
-        assert!(matches_term("Counter-strafe correctly", "counter strafe"));
-        assert!(!matches_term("crosshair placement", "hair"));
+        assert!(matches_term("well-defined process", "well defined"));
+        assert!(!matches_term("processing", "process"));
     }
     #[test]
     fn learning_order_respects_prerequisites_and_is_deterministic() {
