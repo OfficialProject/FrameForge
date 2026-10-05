@@ -94,8 +94,9 @@ jobs:
           Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath $extract -Force
           $package = Join-Path $extract "FrameForge"
           $exe = Join-Path $package "frameforge.exe"
+          $pwsh = (Get-Command pwsh).Source
           foreach ($name in @("yt-dlp","ffmpeg","ffprobe","deno")) {
-            [IO.File]::WriteAllText((Join-Path $tools "$name.cmd"), "@echo off" + [Environment]::NewLine + "echo smoke" + [Environment]::NewLine + "exit /b 0")
+            Copy-Item $pwsh (Join-Path $tools "$name.exe") -Force
           }
           $env:Path = "$tools;$env:Path"
           Push-Location $cwd
