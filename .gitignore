@@ -1,0 +1,5 @@
+/target/
+.frameforge/
+frameforge-output/
+research-output/
+*.log

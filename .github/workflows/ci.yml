@@ -1,0 +1,127 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: frameforge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable action
+        with:
+          toolchain: 1.99.0
+          components: clippy,rustfmt
+      - name: Install media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg tesseract-ocr
+      - name: Install Deno for JavaScript challenges
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.6.0
+      - name: Install yt-dlp with EJS support
+        run: pipx install "yt-dlp[default]==2026.08.19"
+      - run: cargo fmt --all
+      - run: cargo test --all-targets
+      - run: cargo build --release
+      - run: ./target/release/frameforge --help
+      - run: ./target/release/frameforge discover --help
+      - run: ./target/release/frameforge validate --help
+      - name: Verify research runtime dependencies
+        run: |
+          yt-dlp --version
+          deno --version
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+          tesseract --version | head -n 1
+
+  source-size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Verify generic source surface
+        run: |
+          test ! -d src/adapters
+          test ! -d src/processors
+          test ! -d src/tools
+          test ! -d test
+          test ! -f profiles/cs2.json
+          test ! -f package.json
+          test ! -f package-lock.json
+          test ! -f tsconfig.json
+          test ! -f Dockerfile
+          test -f Cargo.toml
+          test -f src/main.rs
+          test -f src/catalog.rs
+          test -f src/validation.rs
+          ! grep -RniE 'cs2|counter.?strafe|faceit|aim trainer|esports|academy' README.md src profiles Cargo.toml sources.txt
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable action
+        with:
+          toolchain: 1.99.0
+          components: clippy,rustfmt
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable action
+        with:
+          toolchain: 1.99.0
+      - name: Verify dependency lockfile
+        run: |
+          cargo generate-lockfile
+          git diff --exit-code -- Cargo.lock
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: RustSec audit
+        run: cargo audit
+
+  cross-platform-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable action
+        with:
+          toolchain: 1.99.0
+      - name: Run Rust test suite
+        run: cargo test --all-targets
+      - name: Build release binary
+        run: cargo build --release
