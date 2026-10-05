@@ -17,6 +17,7 @@ pub struct Classification{
     pub label:String,pub score:i32,pub reasons:Vec<String>,pub transcript_used:bool,
     pub keep_for_research:bool,pub classifier_version:u32,
     #[serde(default)] pub profile:String,
+    #[serde(default)] pub profile_fingerprint:String,
 }
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct ClassificationRecord{pub video:VideoCandidate,pub metadata:Option<VideoMetadata>,pub transcript:Vec<TranscriptEntry>,pub classification:Classification}

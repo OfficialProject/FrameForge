@@ -2,6 +2,7 @@ use crate::model::{Classification,ClassificationRecord,VideoCandidate};
 use crate::ytdlp;
 use anyhow::{Context,Result};
 use serde::Deserialize;
+use sha2::{Digest,Sha256};
 use std::fs;
 use std::path::PathBuf;
 
@@ -24,14 +25,16 @@ struct Rules{
     negative:Vec<(String,i32,String)>,
 }
 
-pub struct Classifier{root:PathBuf,force:bool,profile:Profile}
+pub struct Classifier{root:PathBuf,force:bool,profile:Profile,profile_fingerprint:String}
 
 impl Classifier{
     pub fn new(root:PathBuf,force:bool,profile_path:PathBuf)->Result<Self>{
         fs::create_dir_all(&root)?;
-        let profile:Profile=serde_json::from_slice(&fs::read(&profile_path)?)
-            .with_context(||format!("cannot load research profile {}",profile_path.display()))?;
-        Ok(Self{root,force,profile})
+        let bytes=fs::read(&profile_path).with_context(||format!("cannot read research profile {}",profile_path.display()))?;
+        let profile:Profile=serde_json::from_slice(&bytes)
+            .with_context(||format!("cannot parse research profile {}",profile_path.display()))?;
+        let profile_fingerprint=format!("{:x}",Sha256::digest(&bytes));
+        Ok(Self{root,force,profile,profile_fingerprint})
     }
     pub fn profile_name(&self)->&str{&self.profile.name}
 
@@ -40,7 +43,7 @@ impl Classifier{
         if !self.force {
             if let Ok(text)=fs::read_to_string(&path) {
                 if let Ok(r)=serde_json::from_str::<ClassificationRecord>(&text) {
-                    if r.video.title==video.title&&r.classification.classifier_version==VERSION&&r.classification.profile==self.profile.name{return Ok(r);}
+                    if r.video.title==video.title&&r.video.url==video.url&&r.video.is_short==video.is_short&&r.classification.classifier_version==VERSION&&r.classification.profile==self.profile.name&&r.classification.profile_fingerprint==self.profile_fingerprint{return Ok(r);}
                 }
             }
         }
@@ -61,7 +64,7 @@ impl Classifier{
     fn finish(&self,video:&VideoCandidate,metadata:Option<crate::model::VideoMetadata>,transcript:Vec<crate::model::TranscriptEntry>,label:&str,score:i32,reasons:Vec<String>,transcript_used:bool)->Result<ClassificationRecord>{
         let record=ClassificationRecord{
             video:video.clone(),metadata,transcript,
-            classification:Classification{label:label.into(),score,reasons,transcript_used,keep_for_research:label!="non_educational",classifier_version:VERSION,profile:self.profile.name.clone()}
+            classification:Classification{label:label.into(),score,reasons,transcript_used,keep_for_research:label!="non_educational",classifier_version:VERSION,profile:self.profile.name.clone(),profile_fingerprint:self.profile_fingerprint.clone()}
         };
         let path=self.root.join(format!("{}.json",video.id));
         let temp=path.with_extension("json.tmp");
