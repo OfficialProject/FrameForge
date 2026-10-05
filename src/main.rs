@@ -120,8 +120,9 @@ fn run(config:Config)->Result<()>{
     Ok(())
 }
 fn research_one(record:&ClassificationRecord,config:&Config,registry:&Registry)->Result<()>{
-    let id=&record.video.id;if !config.force&&registry.is_complete(id)&&research_cache_current(&dir,record,config){return Ok(());}
-    let dir=config.output.join(id);let frames_dir=dir.join("frames");fs::create_dir_all(&frames_dir)?;
+    let id=&record.video.id;
+    let dir=config.output.join(id);
+    if !config.force&&registry.is_complete(id)&&research_cache_current(&dir,record,config){return Ok(());}let frames_dir=dir.join("frames");fs::create_dir_all(&frames_dir)?;
     let previous=registry.start(id)?;
     let result:Result<()>=(||{
         let(metadata,transcript)=if previous.is_some()&&dir.join("metadata.json").is_file()&&dir.join("transcript.json").is_file(){(read_json(&dir.join("metadata.json"))?,read_json(&dir.join("transcript.json"))?)}else{fetch_evidence(record,&dir)?};
