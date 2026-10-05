@@ -20,3 +20,18 @@ pub fn write(path:&Path,data:&[u8])->Result<()>{
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::write;
+    use std::fs;
+    #[test]
+    fn writes_and_replaces() {
+        let path=std::env::temp_dir().join(format!("frameforge-atomic-test-{}.json",std::process::id()));
+        write(&path,b"first").unwrap();
+        assert_eq!(fs::read(&path).unwrap(),b"first");
+        write(&path,b"second").unwrap();
+        assert_eq!(fs::read(&path).unwrap(),b"second");
+        let _=fs::remove_file(path);
+    }
+}
