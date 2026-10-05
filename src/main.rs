@@ -158,7 +158,7 @@ fn research_one(record:&ClassificationRecord,config:&Config,registry:&Registry)-
     if let Err(ref e)=result{registry.mark_failed(id,&e.to_string())?;}result
 }
 fn fetch_evidence(record:&ClassificationRecord,dir:&Path)->Result<(Option<model::VideoMetadata>,Vec<model::TranscriptEntry>)>{
-    let(metadata,transcript)=if record.metadata.is_some()||!record.transcript.is_empty(){(record.metadata.clone(),record.transcript.clone())}else{match ytdlp::fetch_metadata_and_transcript(&record.video.url){Ok((metadata,transcript))=>(Some(metadata),transcript),Err(error)=>{fs::write(dir.join("evidence_warning.txt"),format!("Metadata/transcript retrieval failed: {error}"))?;(None,Vec::new())}}};
+    let(metadata,transcript)=if record.metadata.is_some()||!record.transcript.is_empty(){(record.metadata.clone(),record.transcript.clone())}else{match ytdlp::fetch_metadata_and_transcript(&record.video.url){Ok((metadata,transcript))=>(Some(metadata),transcript),Err(error)=>{atomic::write(&dir.join("evidence_warning.txt"),format!("Metadata/transcript retrieval failed: {error}").as_bytes())?;(None,Vec::new())}}};
     write_json(&dir.join("metadata.json"),&metadata)?;write_json(&dir.join("transcript.json"),&transcript)?;Ok((metadata,transcript))
 }
 fn research_cache_current(dir:&Path,record:&ClassificationRecord,config:&Config)->bool{
