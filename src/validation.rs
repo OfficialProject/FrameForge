@@ -19,10 +19,14 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
     let videos=manifest.get("videos").and_then(Value::as_array).context("manifest.videos must be an array")?;
     let catalog:Value=serde_json::from_slice(&fs::read(&catalog_path)?)?;
     if catalog.get("schemaVersion").and_then(Value::as_u64)!=Some(3){bail!("research catalog has an unsupported schema version");}
+    if manifest.pointer("/pipeline/version").and_then(Value::as_u64)!=Some(3){bail!("manifest has an unsupported pipeline version");}
+    if catalog.get("profile").and_then(Value::as_str)!=Some(manifest_profile){bail!("manifest and catalog profiles differ");}
     let learning_order=catalog.get("learningOrder").and_then(Value::as_array).context("research catalog has no learningOrder")?;
     let catalog_concepts=catalog.get("concepts").and_then(Value::as_array).context("research catalog has no concepts")?;
     let mut concept_ids=HashSet::new();
     for concept in catalog_concepts{
+        if concept.get("evidenceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true)==false{bail!("catalog concept has invalid evidenceScore");}
+        if concept.get("importanceScore").and_then(Value::as_f64).map(|v|v.is_finite()&&v>=0.0).unwrap_or(true)==false{bail!("catalog concept has invalid importanceScore");}
         let id=concept.get("id").and_then(Value::as_str).context("catalog concept is missing id")?;
         if !concept_ids.insert(id.to_string()){bail!("catalog contains duplicate concept {id}");}
         for p in concept.get("prerequisites").and_then(Value::as_array).context("catalog concept is missing prerequisites")?{
@@ -62,9 +66,13 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
         let concepts:Vec<ConceptRecord>=read_required(&dir,"concepts.json",id)?;
         let analysis:Value=read_required_value(&dir,"analysis.json",id)?;
         if analysis.get("schemaVersion").and_then(Value::as_u64)!=Some(3){bail!("video {id} has an unsupported analysis schema");}
+        if analysis.pointer("/pipeline/version").and_then(Value::as_u64)!=Some(3){bail!("video {id} has an unsupported pipeline version");}
+        if analysis.pointer("/pipeline/classificationVersion").and_then(Value::as_u64)!=Some(classification.classifier_version as u64){bail!("video {id} has mismatched classifier version");}
         let provenance=analysis.get("provenance").context("analysis is missing provenance")?;
         if provenance.get("videoId").and_then(Value::as_str)!=Some(id){bail!("video {id} has mismatched provenance");}
         if video_file.id!=id{bail!("video {id} has mismatched video.json identity");}
+        if video.get("url").and_then(Value::as_str)!=Some(video_file.url.as_str())||video.get("title").and_then(Value::as_str)!=Some(video_file.title.as_str())||video.get("isShort").and_then(Value::as_bool)!=Some(video_file.is_short){bail!("manifest/video mismatch for {id}");}
+        if video.get("classification")!=Some(&serde_json::to_value(&classification)?){bail!("manifest/classification mismatch for {id}");}
         if classification.profile_fingerprint.is_empty(){bail!("video {id} is missing its classification profile fingerprint");}
         if analysis.pointer("/provenance/sourceUrl").and_then(Value::as_str)!=Some(video_file.url.as_str()){bail!("video {id} has mismatched provenance URL");}
         if analysis.pointer("/pipeline/profileFingerprint").and_then(Value::as_str)!=Some(classification.profile_fingerprint.as_str()){bail!("video {id} has mismatched profile fingerprint");}
@@ -76,6 +84,9 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
         if analysis.get("transcript")!=Some(&serde_json::to_value(&transcript)?){bail!("video {id} analysis/transcript mismatch");}
         if analysis.get("ocr")!=Some(&serde_json::to_value(&ocr)?){bail!("video {id} analysis/ocr mismatch");}
         if analysis.get("concepts")!=Some(&serde_json::to_value(&concepts)?){bail!("video {id} analysis/concepts mismatch");}
+        if analysis.get("frames")!=Some(&serde_json::to_value(&visual.frames)?){bail!("video {id} analysis/visual frame mismatch");}
+        for entry in &transcript{if !entry.start.is_finite()||!entry.end.is_finite()||entry.start<0.0||entry.end<entry.start||entry.text.trim().is_empty(){bail!("video {id} has invalid transcript data");}}
+        for entry in &ocr{if !entry.time.is_finite()||entry.time<0.0||entry.text.trim().is_empty(){bail!("video {id} has invalid OCR data");}}
         let coverage=analysis.get("coverage").context("analysis is missing coverage")?;
         if coverage.get("visualCoverageComplete").and_then(Value::as_bool)!=Some(true){bail!("video {id} has incomplete visual coverage");}
         let frames=analysis.get("frames").and_then(Value::as_array).context("analysis.frames must be an array")?;
