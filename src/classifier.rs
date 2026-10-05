@@ -33,6 +33,7 @@ impl Classifier{
         let bytes=fs::read(&profile_path).with_context(||format!("cannot read research profile {}",profile_path.display()))?;
         let profile:Profile=serde_json::from_slice(&bytes)
             .with_context(||format!("cannot parse research profile {}",profile_path.display()))?;
+        validate_profile(&profile)?;
         let profile_fingerprint=format!("{:x}",Sha256::digest(&bytes));
         Ok(Self{root,force,profile,profile_fingerprint})
     }
@@ -106,6 +107,18 @@ fn matches_term(text:&str,term:&str)->bool{
     let haystack=format!(" {} ",text.chars().map(|c|if c.is_ascii_alphanumeric(){c}else{' '}).collect::<String>());
     let needle=format!(" {} ",term.to_lowercase().chars().map(|c|if c.is_ascii_alphanumeric(){c}else{' '}).collect::<String>());
     haystack.contains(&needle)
+}
+
+fn validate_profile(profile:&Profile)->Result<()>{
+    if profile.name.trim().is_empty(){return Err(anyhow::anyhow!("research profile name cannot be empty"));}
+    let mut seen=std::collections::HashSet::new();
+    for (term,_,_) in profile.classification.positive.iter().chain(profile.classification.negative.iter()){
+        if term.trim().is_empty(){return Err(anyhow::anyhow!("research profile contains an empty keyword"));}
+        let normalized=term.to_lowercase().chars().map(|c|if c.is_ascii_alphanumeric(){c}else{' '}).collect::<String>();
+        if normalized.split_whitespace().next().is_none(){return Err(anyhow::anyhow!("research profile keyword contains no searchable characters: {term:?}"));}
+        if !seen.insert(normalized){return Err(anyhow::anyhow!("research profile contains duplicate keywords: {term:?}"));}
+    }
+    Ok(())
 }
 
 #[derive(Clone,Copy)]enum Decision{Educational,NonEducational,Uncertain}

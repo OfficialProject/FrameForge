@@ -8,6 +8,10 @@ use std::process::Command;
 use std::time::{SystemTime,UNIX_EPOCH};
 
 fn run(args:&[String])->Result<std::process::Output>{Command::new("yt-dlp").args(args).output().context("yt-dlp is required but was not found on PATH")}
+fn validate_video_id(id:&str)->Result<()>{
+    if id.is_empty()||id.len()>200||id=="."||id==".."||id.chars().any(|c|c.is_control()||matches!(c,'/'|'\\')){bail!("yt-dlp returned an unsafe video id");}
+    Ok(())
+}
 fn normalize_url(url:&str,id:&str)->String{if url.contains("youtube.com/watch"){format!("https://www.youtube.com/watch?v={id}")}else if url.len()==11{format!("https://www.youtube.com/watch?v={id}")}else{url.to_string()}}
 
 pub fn discover_source(source:&str)->Result<Vec<VideoCandidate>>{
@@ -22,7 +26,7 @@ fn discover_video(url:&str)->Result<Vec<VideoCandidate>>{
     if !output.status.success(){bail!("yt-dlp video discovery failed: {}",String::from_utf8_lossy(&output.stderr).trim());}
     let info:Value=serde_json::from_slice(&output.stdout).context("invalid yt-dlp video JSON")?;
     let id=info.get("id").and_then(Value::as_str).unwrap_or_default();
-    if id.is_empty(){bail!("yt-dlp returned a video without an id");}
+    validate_video_id(id)?;
     let title=info.get("title").and_then(Value::as_str).unwrap_or("Untitled").to_string();
     let source_name=info.get("channel").or_else(||info.get("uploader")).and_then(Value::as_str).unwrap_or(url).to_string();
     Ok(vec![VideoCandidate{id:id.into(),title,url:normalize_url(info.get("webpage_url").and_then(Value::as_str).unwrap_or(url),id),duration:info.get("duration").and_then(Value::as_f64),upload_date:info.get("upload_date").and_then(Value::as_str).map(str::to_owned),is_short:url.contains("/shorts/"),source_channels:vec![source_name]}])
@@ -35,7 +39,7 @@ pub fn discover_channel(channel:&str)->Result<Vec<VideoCandidate>>{
         if !output.status.success()&&output.stdout.is_empty(){bail!("yt-dlp discovery failed: {}",String::from_utf8_lossy(&output.stderr).trim());}
         let root:Value=serde_json::from_slice(&output.stdout).context("invalid yt-dlp playlist JSON")?;
         if let Some(entries)=root.get("entries").and_then(Value::as_array){for entry in entries{
-            let id=entry.get("id").and_then(Value::as_str).unwrap_or_default();if id.is_empty(){continue;}
+            let id=entry.get("id").and_then(Value::as_str).unwrap_or_default();if id.is_empty(){continue;}validate_video_id(id)?;
             let title=entry.get("title").and_then(Value::as_str).unwrap_or("Untitled").to_string();
             let raw=entry.get("webpage_url").or_else(||entry.get("url")).and_then(Value::as_str).unwrap_or(id);
             all.push(VideoCandidate{id:id.into(),title,url:normalize_url(raw,id),duration:entry.get("duration").and_then(Value::as_f64),upload_date:entry.get("upload_date").and_then(Value::as_str).map(str::to_owned),is_short:tab=="shorts",source_channels:vec![channel.to_string()]});
