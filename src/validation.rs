@@ -64,6 +64,9 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
         if video_file.id!=id{bail!("video {id} has mismatched video.json identity");}
         if classification.profile_fingerprint.is_empty(){bail!("video {id} is missing its classification profile fingerprint");}
         if analysis.pointer("/provenance/sourceUrl").and_then(Value::as_str)!=Some(video_file.url.as_str()){bail!("video {id} has mismatched provenance URL");}
+        if analysis.pointer("/pipeline/profileFingerprint").and_then(Value::as_str)!=Some(classification.profile_fingerprint.as_str()){bail!("video {id} has mismatched profile fingerprint");}
+        if analysis.pointer("/pipeline/ocrEnabled").and_then(Value::as_bool)!=manifest.pointer("/pipeline/ocrEnabled").and_then(Value::as_bool){bail!("video {id} has mismatched OCR configuration");}
+        if analysis.pointer("/pipeline/profile").and_then(Value::as_str)!=Some(manifest_profile){bail!("video {id} has mismatched profile");}
         if analysis.get("video")!=Some(&serde_json::to_value(&video_file)?){bail!("video {id} analysis/video mismatch");}
         if analysis.get("classification")!=Some(&serde_json::to_value(&classification)?){bail!("video {id} analysis/classification mismatch");}
         if analysis.get("metadata")!=Some(&serde_json::to_value(&metadata)?){bail!("video {id} analysis/metadata mismatch");}
@@ -75,7 +78,7 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
         let frames=analysis.get("frames").and_then(Value::as_array).context("analysis.frames must be an array")?;
         let expected=coverage.get("expectedVisualSamples").and_then(Value::as_u64).context("coverage missing expectedVisualSamples")? as usize;
         let sampled=coverage.get("sampledVisualSamples").and_then(Value::as_u64).context("coverage missing sampledVisualSamples")? as usize;
-        if expected!=visual.expected_samples||sampled!=visual.sampled_samples||sampled!=frames.len(){bail!("video {id} has inconsistent visual frame counts");}
+        if expected!=visual.expected_samples||sampled!=visual.sampled_samples||sampled!=frames.len()||((expected>0)&&sampled<expected){bail!("video {id} has inconsistent visual frame counts");}
         if state.frames!=sampled||state.ocr!=ocr.len(){bail!("video {id} state counters do not match artifacts");}
         let mut frame_paths=HashSet::new();
         for (index,frame) in frames.iter().enumerate(){
@@ -83,7 +86,7 @@ pub fn validate_output(output:&Path)->Result<ValidationReport>{
             let time=frame.get("time").and_then(Value::as_f64).context("frame is missing time")?;
             let relative=frame.get("path").and_then(Value::as_str).context("frame is missing path")?;
             let path=Path::new(relative);
-            if frame_index!=index||!time.is_finite()||time<0.0||path.is_absolute()||path.components().any(|c|matches!(c,std::path::Component::ParentDir|std::path::Component::RootDir|std::path::Component::Prefix(_)))||!relative.starts_with("frames/"){bail!("video {id} has unsafe frame metadata");}
+            if frame_index!=index||time!=index as f64||!time.is_finite()||time<0.0||path.is_absolute()||path.components().any(|c|matches!(c,std::path::Component::ParentDir|std::path::Component::RootDir|std::path::Component::Prefix(_)))||!relative.starts_with("frames/"){bail!("video {id} has unsafe frame metadata");}
             if !frame_paths.insert(relative.to_string()){bail!("video {id} has duplicate frame path {relative}");}
             let resolved=dir.join(path);
             if !resolved.is_file()||!is_safe_child(output,&resolved)?{bail!("video {id} is missing or escapes frame {}",relative);}
