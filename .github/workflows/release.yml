@@ -104,6 +104,7 @@ jobs:
           try {
             $doctor = & $exe doctor 2>&1
             if ($LASTEXITCODE -ne 0) { throw "Packaged doctor failed: $doctor" }
+            Write-Host $doctor
             if ($doctor -notmatch "Sources:\s+.*sources\.txt") { throw "Packaged runtime did not report a sources.txt path." }
             if ($doctor -notmatch "Profile:\s+.*profiles[\\/]default\.json") { throw "Packaged runtime did not report the default profile path." }
             Set-Content -Path (Join-Path $override "sources.txt") -Value "# smoke"
@@ -112,6 +113,7 @@ jobs:
             $env:FRAMEFORGE_PROFILE = Join-Path $override "profile.json"
             $overrideDoctor = & $exe doctor 2>&1
             if ($LASTEXITCODE -ne 0) { throw "Environment override doctor failed: $overrideDoctor" }
+            Write-Host $overrideDoctor
             if ($overrideDoctor -notmatch "Sources:\s+.*sources\.txt") { throw "Sources environment override was ignored." }
             if ($overrideDoctor -notmatch "Profile:\s+.*profile\.json") { throw "Profile environment override was ignored." }
             $env:FRAMEFORGE_ROOT = Join-Path $override "root"
