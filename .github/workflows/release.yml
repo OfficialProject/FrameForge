@@ -94,9 +94,10 @@ jobs:
           Expand-Archive -Path "dist/${{ matrix.archive }}" -DestinationPath $extract -Force
           $package = Join-Path $extract "FrameForge"
           $exe = Join-Path $package "frameforge.exe"
-          $pwsh = (Get-Command pwsh).Source
+          Set-Content -Path (Join-Path $tools "smoke.rs") -Value "fn main() {}"
+          rustc --target x86_64-pc-windows-msvc -C target-feature=+crt-static (Join-Path $tools "smoke.rs") -o (Join-Path $tools "smoke.exe")
           foreach ($name in @("yt-dlp","ffmpeg","ffprobe","deno")) {
-            Copy-Item $pwsh (Join-Path $tools "$name.exe") -Force
+            Copy-Item (Join-Path $tools "smoke.exe") (Join-Path $tools "$name.exe") -Force
           }
           $env:Path = "$tools;$env:Path"
           Push-Location $cwd
