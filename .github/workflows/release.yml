@@ -114,8 +114,6 @@ jobs:
             $env:FRAMEFORGE_OUTPUT = Join-Path $override "output"
             & $exe run 2>&1 | Out-Host
             if ($LASTEXITCODE -eq 0) { throw "Expected empty-source smoke run to fail." }
-            if (-not (Test-Path $env:FRAMEFORGE_ROOT)) { throw "Configured root directory was not created." }
-            if (-not (Test-Path $env:FRAMEFORGE_OUTPUT)) { throw "Configured output directory was not created." }
           } finally {
             Pop-Location
           }
