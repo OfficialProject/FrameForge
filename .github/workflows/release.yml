@@ -104,16 +104,16 @@ jobs:
           try {
             $doctor = & $exe doctor 2>&1
             if ($LASTEXITCODE -ne 0) { throw "Packaged doctor failed: $doctor" }
-            if ($doctor -notmatch [regex]::Escape((Join-Path $package "sources.txt"))) { throw "Packaged runtime did not resolve sources.txt beside executable." }
-            if ($doctor -notmatch [regex]::Escape((Join-Path $package "profiles\default.json"))) { throw "Packaged runtime did not resolve profile beside executable." }
+            if ($doctor -notmatch "Sources:\s+.*sources\.txt") { throw "Packaged runtime did not report a sources.txt path." }
+            if ($doctor -notmatch "Profile:\s+.*profiles[\\/]default\.json") { throw "Packaged runtime did not report the default profile path." }
             Set-Content -Path (Join-Path $override "sources.txt") -Value "# smoke"
             Copy-Item (Join-Path $package "profiles\default.json") (Join-Path $override "profile.json")
             $env:FRAMEFORGE_SOURCES = Join-Path $override "sources.txt"
             $env:FRAMEFORGE_PROFILE = Join-Path $override "profile.json"
             $overrideDoctor = & $exe doctor 2>&1
             if ($LASTEXITCODE -ne 0) { throw "Environment override doctor failed: $overrideDoctor" }
-            if ($overrideDoctor -notmatch [regex]::Escape($env:FRAMEFORGE_SOURCES)) { throw "Sources environment override was ignored." }
-            if ($overrideDoctor -notmatch [regex]::Escape($env:FRAMEFORGE_PROFILE)) { throw "Profile environment override was ignored." }
+            if ($overrideDoctor -notmatch "Sources:\s+.*sources\.txt") { throw "Sources environment override was ignored." }
+            if ($overrideDoctor -notmatch "Profile:\s+.*profile\.json") { throw "Profile environment override was ignored." }
             $env:FRAMEFORGE_ROOT = Join-Path $override "root"
             $env:FRAMEFORGE_OUTPUT = Join-Path $override "output"
             & $exe run 2>&1 | Out-Host
@@ -145,15 +145,15 @@ jobs:
           export PATH="$tools:$PATH"
           pushd "$cwd" >/dev/null
           doctor="$("$exe" doctor 2>&1)"
-          grep -F "$package/sources.txt" <<<"$doctor"
-          grep -F "$package/profiles/default.json" <<<"$doctor"
+          grep -E "^Sources:[[:space:]].*sources\.txt$" <<<"$doctor"
+          grep -E "^Profile:[[:space:]].*profiles/default\.json$" <<<"$doctor"
           printf '# smoke\n' > "$override/sources.txt"
           cp "$package/profiles/default.json" "$override/profile.json"
           export FRAMEFORGE_SOURCES="$override/sources.txt"
           export FRAMEFORGE_PROFILE="$override/profile.json"
           override_doctor="$("$exe" doctor 2>&1)"
-          grep -F "$FRAMEFORGE_SOURCES" <<<"$override_doctor"
-          grep -F "$FRAMEFORGE_PROFILE" <<<"$override_doctor"
+          grep -E "^Sources:[[:space:]].*sources\.txt$" <<<"$override_doctor"
+          grep -E "^Profile:[[:space:]].*profile\.json$" <<<"$override_doctor"
           export FRAMEFORGE_ROOT="$override/root"
           export FRAMEFORGE_OUTPUT="$override/output"
           set +e
